@@ -75,11 +75,11 @@ uint32_t processStack(htsFile *of, bam_hdr_t *hdr, alignmentArray *arr) {
     if(!arr->l) return 0;
     NH = getNH(arr->b[arr->l-1]);
 
-    if(NH != arr->l) return 0;
+    if(NH == arr->l) return 1;
     for(i=0; i<arr->l; i++) {
         sam_write1(of, hdr, arr->b[i]);
     }
-    return 1;
+    return 0;
 }
 
 void processFile(htsFile *of, bam_hdr_t *hdr, htsFile *fp) {
@@ -102,10 +102,11 @@ void processFile(htsFile *of, bam_hdr_t *hdr, htsFile *fp) {
             lname = bam_get_qname(arr->b[0]);
         }
     }
+    nTotal++;
     nFiltered += processStack(of, hdr, arr);
     aaDestroy(arr);
     bam_destroy1(b);
-fprintf(stderr, "Filtered out %"PRIu32" of %"PRIu32 " groups of multimappers\n", nFiltered, nTotal);
+fprintf(stderr, "Filtered out %"PRIu32" of %"PRIu32 " groups of multimappers (%5.2f%%)\n", nFiltered, nTotal, 100.0 * ((float) nFiltered)/((float) nTotal));
 }
 
 void usage() {
