@@ -67,19 +67,19 @@ int getHI(bam1_t *b) {
     return bam_aux2i(p);
 }
 
-//Return 0 if at least one alignment is missing, otherwise 1
+//Return 1 if at least one alignment is missing, otherwise 0
 //If there are no missing alignments, the stack is written to "of"
 uint32_t processStack(htsFile *of, bam_hdr_t *hdr, alignmentArray *arr) {
     int NH, i;
 
-    if(!arr->l) return 0;
+    assert(arr->l);
     NH = getNH(arr->b[arr->l-1]);
 
-    if(NH != arr->l && NH>0) return 0;
+    if(NH != arr->l && NH>0) return 1;
     for(i=0; i<arr->l; i++) {
         sam_write1(of, hdr, arr->b[i]);
     }
-    return 1;
+    return 0;
 }
 
 void processFile(htsFile *of, bam_hdr_t *hdr, htsFile *fp) {
