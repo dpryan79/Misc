@@ -75,11 +75,11 @@ uint32_t processStack(htsFile *of, bam_hdr_t *hdr, alignmentArray *arr) {
     if(!arr->l) return 0;
     NH = getNH(arr->b[arr->l-1]);
 
-    if(NH == arr->l) return 1;
+    if(NH != arr->l && NH>0) return 0;
     for(i=0; i<arr->l; i++) {
         sam_write1(of, hdr, arr->b[i]);
     }
-    return 0;
+    return 1;
 }
 
 void processFile(htsFile *of, bam_hdr_t *hdr, htsFile *fp) {
