@@ -6,4 +6,4 @@ The question, then is whether this is:
 
 Making a pthreads version in C should clarify this completely.
 
-Results: The warning message is still printed but everything completes as expected, though slowly. There's no reason to use multiple threads for this task, since network IO is too slow for even a single core to be fully used in most cases. Consequently, the deeptools mapReduce paradigm can be dispensed with. The warning message will still get printed, but only once. I can easily put a pull request in to have that `forintf` removed, since it's correct that you can't seek to the end (I tried).
+Results: The warning message is still printed but everything completes as expected, though slowly. There's no reason to use multiple threads for this task, since network IO is too slow for even a single core to be fully used in most cases. Consequently, the deeptools mapReduce paradigm can be dispensed with. The warning message will still get printed, but only once. I can easily put a pull request in to have that `fprintf` removed, since it's correct that you can't seek to the end (I tried).
