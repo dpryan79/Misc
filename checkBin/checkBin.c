@@ -7,7 +7,7 @@
 //This is directly from the spec.
 int calcBin(bam1_t *b) {
     int32_t begin = b->core.pos;
-    int32_t end = bam_endpos(b);
+    int32_t end = bam_endpos(b)-1;
 
     if (begin>>14 == end>>14) return ((1<<15)-1)/7 + (begin>>14);
     if (begin>>17 == end>>17) return ((1<<12)-1)/7 + (begin>>17);
