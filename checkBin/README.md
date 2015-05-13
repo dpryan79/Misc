@@ -1,0 +1,1 @@
+The `checkBin` executable processes a BAM or CRAM file and ensures that the alignment 'bin' fields are correct. At the moment, we're seeing an error in a couple BAM files and the question is whether this is due to samtools or picard (or perhaps something else).
