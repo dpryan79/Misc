@@ -9,6 +9,8 @@ int calcBin(bam1_t *b) {
     int32_t begin = b->core.pos;
     int32_t end = bam_endpos(b)-1;
 
+    if(b->core.flag&4) end = begin;
+
     if (begin>>14 == end>>14) return ((1<<15)-1)/7 + (begin>>14);
     if (begin>>17 == end>>17) return ((1<<12)-1)/7 + (begin>>17);
     if (begin>>20 == end>>20) return ((1<<9)-1)/7  + (begin>>20);
@@ -27,9 +29,9 @@ void usage(char *prog) {
 }
 
 int main(int argc, char *argv[]) {
-    htsFile *fp;
-    bam_hdr_t *hdr;
-    bam1_t *b;
+    htsFile *fp = NULL;
+    bam_hdr_t *hdr = NULL;
+    bam1_t *b = NULL;
 
     if(argc != 2 || strcmp(argv[1],"-h") == 0) {
         usage(argv[0]);
@@ -51,9 +53,9 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Could not allocate space to hold even a single alignment!\n");
         return 1;
     }
-    while(sam_read1(fp, hdr, b) > 0) {
+    while(sam_read1(fp, hdr, b) >= 0) {
         if(b->core.bin != calcBin(b)) {
-            printf("%s @%s:%"PRId32" has bin %i but should be in %i\n", bam_get_qname(b), hdr->target_name[b->core.tid], b->core.pos, b->core.bin, calcBin(b));
+            printf("%s %"PRId32"-%"PRId32" has bin %i but should be in %i\n", bam_get_qname(b), b->core.pos, bam_endpos(b), b->core.bin, calcBin(b));
         }
     }
     bam_destroy1(b);
