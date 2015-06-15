@@ -1,11 +1,17 @@
-include=-I/home/ryan/Documents/SourceCode/libGTF -I/home/ryan/Documents/SourceCode/htslib
-libs=/home/ryan/Documents/SourceCode/libGTF/libGTF.a /home/ryan/Documents/SourceCode/htslib/libhts.a
+include=-I../libGTF -I../htslib
+libs=../libGTF/libGTF.a ../htslib/libhts.a
 
-.PHONY: all
+.PHONY: all htslib libGTF
 
 all: countRepeats
 
-countRepeats:
+htslib:
+	$(MAKE) -C ../htslib
+
+libGTF:
+	$(MAKE) -C ../libGTF
+
+countRepeats: htslib libGTF
 	gcc -g $(include) -o $@ countRepeats.c $(libs) -lz -lpthread -lpcre
 
 clean:

@@ -47,5 +47,3 @@ ddsName <- fromRepeats(sampleTable, type="repName", directory="~/", design=~Grou
 ```
 
 `repName` can alternatively be `repClass` or `repFamily`.
-
-
