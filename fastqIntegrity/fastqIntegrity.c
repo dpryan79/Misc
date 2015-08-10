@@ -20,15 +20,18 @@ KSTREAM_INIT(gzFile, gzread, 16384)
     -6: Unexpected QUAL score
 */
 int getRead(kstring_t *ks, kstream_t *seq, int *expectedLength) {
-    int ret, i;
+    int ret, i, err;
     //Read name
     ks_getuntil2(seq, '\n', ks, &ret, 0);
     if(ret == 0) {
-        if(gzeof(seq->f) == 1) return 0;
-    } else {
-        return -1;
+        if(gzeof(seq->f) == 1) {
+            return 0;
+        } else {
+            fprintf(stderr, "Got gzerror %s\n", gzerror(seq->f, &err));
+            return -1;
+        }
     }
-    if(ks->s[0] == '@') return -2;
+    if(ks->s[0] != '@') return -2;
     //Sequence
     ks_getuntil2(seq, '\n', ks, &ret, 0);
     if(*expectedLength) assert(strlen(ks->s) == *expectedLength);
