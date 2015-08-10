@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
     }
 
     for(i=1; i<argc; i++) {
-        fp = gzopen(argv[1], "r");
+        fp = gzopen(argv[i], "r");
         if(!fp) {
             fprintf(stderr, "Couldn't open %s for reading!\n", argv[1]);
             return 1;
@@ -99,6 +99,7 @@ int main(int argc, char *argv[]) {
         assert(kstream);
         ks = calloc(1, sizeof(kstring_t));
         assert(ks);
+        total = 0;
         while((rv = getRead(ks, kstream, &expectedLength)) == 1) total++;
         if(rv != 0) printf("An error occured (%i) while processing %s!\n", rv, argv[i]);
         else printf("%"PRIu32" reads of length %i %s\n", total, expectedLength, argv[i]);
@@ -106,7 +107,6 @@ int main(int argc, char *argv[]) {
         ks_destroy(kstream);
         free(ks->s);
         free(ks);
-        total = 0;
         gzclose(fp);
     }
 
