@@ -34,6 +34,14 @@ int getRead(kstring_t *ks, kstream_t *seq, int *expectedLength) {
     if(ks->s[0] != '@') return -2;
     //Sequence
     ks_getuntil2(seq, '\n', ks, &ret, 0);
+    if(ret == 0) {
+        if(gzeof(seq->f) == 1) {
+            return 0;
+        } else {
+            fprintf(stderr, "Got gzerror %s\n", gzerror(seq->f, &err));
+            return -1;
+        }
+    }
     if(*expectedLength) assert(strlen(ks->s) == *expectedLength);
     else *expectedLength = strlen(ks->s);
     for(i=0; i<*expectedLength; i++) {
@@ -41,9 +49,25 @@ int getRead(kstring_t *ks, kstream_t *seq, int *expectedLength) {
     }
     //+
     ks_getuntil2(seq, '\n', ks, &ret, 0);
+    if(ret == 0) {
+        if(gzeof(seq->f) == 1) {
+            return 0;
+        } else {
+            fprintf(stderr, "Got gzerror %s\n", gzerror(seq->f, &err));
+            return -1;
+        }
+    }
     if(ks->s[0] != '+') return -4;
     //Qual
     ks_getuntil2(seq, '\n', ks, &ret, 0);
+    if(ret == 0) {
+        if(gzeof(seq->f) == 1) {
+            return 0;
+        } else {
+            fprintf(stderr, "Got gzerror %s\n", gzerror(seq->f, &err));
+            return -1;
+        }
+    }
     if(strlen(ks->s) != *expectedLength) return -5;
     for(i=0; i<*expectedLength; i++) {
         if((ks->s[i] < 33) || (ks->s[i] > 73)) return -6;
