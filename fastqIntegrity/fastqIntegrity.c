@@ -106,6 +106,7 @@ int main(int argc, char *argv[]) {
         ks_destroy(kstream);
         free(ks->s);
         free(ks);
+        total = 0;
         gzclose(fp);
     }
 
