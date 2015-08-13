@@ -1,23 +1,20 @@
 CC = gcc
 OPTS = -Wall -g
 
-.PHONY: all clean htslib clean-all
+.PHONY: all clean test
 
 .SUFFIXES: .c .o
 
-all: fastqIntegrity
+all: fastqIntegrity test
 
 .c.o:
-	$(CC) -c $(OPTS) -I../htslib $< -o $@
+	$(CC) -c $(OPTS) $< -o $@
 
-htslib:
-	$(MAKE) -C ../htslib
+fastqIntegrity:
+	$(CC) $(OPTS) -o $@ fastqIntegrity.c ../htslib/libhts.a -lz
 
-fastqIntegrity: htslib
-	$(CC) $(OPTS) -I../htslib -o $@ fastqIntegrity.c ../htslib/libhts.a -lm -lz -lpthread
+test:
+	./fastqIntegrity tests/*.gz
 
 clean:
 	rm -f *.o fastqIntegrity
-
-clean-all: clean
-	$(MAKE) --directory=../htslib clean

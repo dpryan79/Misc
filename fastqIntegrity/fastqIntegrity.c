@@ -1,5 +1,3 @@
-#include "../htslib/htslib/kseq.h"
-#include "../htslib/htslib/kstring.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,7 +5,7 @@
 #include <assert.h>
 #include <inttypes.h>
 
-KSTREAM_INIT(gzFile, gzread, 16384)
+#define BUFLEN 1024
 
 /* returns:
      0: EOF
@@ -19,58 +17,50 @@ KSTREAM_INIT(gzFile, gzread, 16384)
     -5: QUAL has unexpected length
     -6: Unexpected QUAL score
 */
-int getRead(kstring_t *ks, kstream_t *seq, int *expectedLength) {
-    int ret, i, err;
+int getRead(char *buf, gzFile fp, int *expectedLength) {
+    int i, err;
     //Read name
-    ks_getuntil2(seq, '\n', ks, &ret, 0);
-    if(ret == 0) {
-        if(gzeof(seq->f) == 1) {
-            return 0;
-        } else {
-            fprintf(stderr, "Got gzerror %s\n", gzerror(seq->f, &err));
-            return -1;
-        }
+    buf = gzgets(fp, buf, BUFLEN);
+    gzerror(fp, &err);
+    if(err != Z_OK) {
+        return -1;
+    } else if(gzeof(fp) == 1) {
+        return 0;
     }
-    if(ks->s[0] != '@') return -2;
+    if(buf[0] != '@') return -2;
     //Sequence
-    ks_getuntil2(seq, '\n', ks, &ret, 0);
-    if(ret == 0) {
-        if(gzeof(seq->f) == 1) {
-            return 0;
-        } else {
-            fprintf(stderr, "Got gzerror %s\n", gzerror(seq->f, &err));
-            return -1;
-        }
+    buf = gzgets(fp, buf, BUFLEN);
+    gzerror(fp, &err);
+    if(err != Z_OK) {
+        return -1;
+    } else if(gzeof(fp) == 1) {
+        return -7;
     }
-    if(*expectedLength) assert(strlen(ks->s) == *expectedLength);
-    else *expectedLength = strlen(ks->s);
+    if(*expectedLength) assert(strlen(buf)-1 == *expectedLength);
+    else *expectedLength = strlen(buf)-1;
     for(i=0; i<*expectedLength; i++) {
-        if((ks->s[i] != 'A') && (ks->s[i] != 'C') && (ks->s[i] != 'G') && (ks->s[i] != 'T') && (ks->s[i] != 'N')) return -3;
+        if((buf[i] != 'A') && (buf[i] != 'C') && (buf[i] != 'G') && (buf[i] != 'T') && (buf[i] != 'N')) return -3;
     }
     //+
-    ks_getuntil2(seq, '\n', ks, &ret, 0);
-    if(ret == 0) {
-        if(gzeof(seq->f) == 1) {
-            return 0;
-        } else {
-            fprintf(stderr, "Got gzerror %s\n", gzerror(seq->f, &err));
-            return -1;
-        }
+    buf = gzgets(fp, buf, BUFLEN);
+    gzerror(fp, &err);
+    if(err != Z_OK) {
+        return -1;
+    } else if(gzeof(fp) == 1) {
+        return -7;
     }
-    if(ks->s[0] != '+') return -4;
+    if(buf[0] != '+') return -4;
     //Qual
-    ks_getuntil2(seq, '\n', ks, &ret, 0);
-    if(ret == 0) {
-        if(gzeof(seq->f) == 1) {
-            return 0;
-        } else {
-            fprintf(stderr, "Got gzerror %s\n", gzerror(seq->f, &err));
-            return -1;
-        }
+    buf = gzgets(fp, buf, BUFLEN);
+    gzerror(fp, &err);
+    if(err != Z_OK) {
+        return -1;
+    } else if(gzeof(fp) == 1) {
+        return -7;
     }
-    if(strlen(ks->s) != *expectedLength) return -5;
+    if(strlen(buf)-1 != *expectedLength) return -5;
     for(i=0; i<*expectedLength; i++) {
-        if((ks->s[i] < 33) || (ks->s[i] > 73)) return -6;
+        if((buf[i] < 33) || (buf[i] > 73)) return -6;
     }
 
     return 1;
@@ -78,8 +68,7 @@ int getRead(kstring_t *ks, kstream_t *seq, int *expectedLength) {
 
 int main(int argc, char *argv[]) {
     gzFile fp;
-    kstream_t *kstream;
-    kstring_t *ks;
+    char buf[BUFLEN];
     int expectedLength = 0, i, rv;
     uint32_t total = 0;
 
@@ -95,18 +84,11 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        kstream = ks_init(fp);
-        assert(kstream);
-        ks = calloc(1, sizeof(kstring_t));
-        assert(ks);
         total = 0;
-        while((rv = getRead(ks, kstream, &expectedLength)) == 1) total++;
+        while((rv = getRead(buf, fp, &expectedLength)) == 1) total++;
         if(rv != 0) printf("An error occured (%i) while processing %s!\n", rv, argv[i]);
         else printf("%"PRIu32" reads of length %i %s\n", total, expectedLength, argv[i]);
 
-        ks_destroy(kstream);
-        free(ks->s);
-        free(ks);
         gzclose(fp);
     }
 
