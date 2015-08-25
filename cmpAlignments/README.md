@@ -2,6 +2,8 @@ Compare two BAM files holding alignments of the same reads to different genomes,
 
 The alignments *must* be made with bowtie2. The BAM files *must* have alignments in the same order.
 
+Note that the output files are sorted, so you can directly index and load them in IGV.
+
 Compilation
 ===========
 

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#define kroundup32(x) (--(x), (x)|=(x)>>1, (x)|=(x)>>2, (x)|=(x)>>4, (x)|=(x)>>8, (x)|=(x)>>16, ++(x))
 
 int32_t getAS(bam1_t *b) {
     int32_t def = -1073741823; //half of INT_MIN
@@ -129,19 +130,35 @@ int32_t calcMAPQ(int32_t AS, int32_t XS, int32_t scMin) {
     }
 }
 
-int writeAlignment(htsFile *o, bam_hdr_t *hdr, bam1_t *b, int32_t MAPQ) {
-    assert(MAPQ >= 0);
-    assert(MAPQ <= 255);
-    b->core.qual = MAPQ;
-    return sam_write1(o, hdr, b);
+int cmpAl(const void *a, const void *b) {
+    bam1_t *b1 = *(bam1_t**)a;
+    bam1_t *b2 = *(bam1_t**)b;
+
+    if(b1->core.tid < b2->core.tid) return -1;
+    if(b1->core.tid > b2->core.tid) return 1;
+    if(b1->core.pos < b2->core.pos) return -1;
+    if(b1->core.pos > b2->core.pos) return 1;
+    if(bam_endpos(b1) < bam_endpos(b2)) return -1;
+    if(bam_endpos(b1) > bam_endpos(b2)) return 1;
+    return 0;
+}
+
+void sortAlignments(bam1_t **b, int32_t l) {
+    qsort((void*)b, l, sizeof(bam1_t*), &cmpAl);
+}
+
+void writeAlignments(htsFile *o, bam_hdr_t *hdr, bam1_t **b, int32_t l) {
+    int32_t i;
+    for(i=0; i<l; i++) assert(sam_write1(o, hdr, b[i]));
 }
 
 int main(int argc, char *argv[]) {
     htsFile *i1, *i2, *o1, *o2, *o;
     bam1_t *r1, *r2;
+    bam1_t **r1s = NULL, **r2s = NULL;
     bam_hdr_t *hdr1, *hdr2;
-    int32_t AS1, AS2, XS1, XS2;
-    int32_t bestAS, bestXS, MAPQ;
+    int32_t AS1, AS2, XS1, XS2, l1 = 0, l2 = 0, m1 = 0, m2 = 0;
+    int32_t bestAS, bestXS, MAPQ, i;
     int32_t scMin = -1073741823;
     char str[1024], *p;
 
@@ -176,11 +193,11 @@ int main(int argc, char *argv[]) {
     snprintf(str, 1024, "%s.unique.bam", argv[2]);
     o2 = sam_open(str, "wb");
 
-    assert(sam_hdr_write(o1, hdr1));
-    assert(sam_hdr_write(o2, hdr2));
+    assert(sam_hdr_write(o1, hdr1) == 0);
+    assert(sam_hdr_write(o2, hdr2) == 0);
 
     while(sam_read1(i1, hdr1, r1) > 0) {
-        assert(sam_read1(i1, hdr2, r2) > 0);
+        assert(sam_read1(i2, hdr2, r2) > 0);
 
         //Make sure the names match
         assert(strcmp(bam_get_qname(r1), bam_get_qname(r2)) == 0);
@@ -208,13 +225,35 @@ int main(int argc, char *argv[]) {
 
         MAPQ = calcMAPQ(bestAS, bestXS, scMin);
         if(o == o1) {
-            assert((r1->core.flag&4) == 0);
-            assert(writeAlignment(o1, hdr1, r1, MAPQ));
+            r1->core.qual = MAPQ;
+            if(l1+1 >= m1) {
+                m1 = l1+1;
+                kroundup32(m1);
+                assert((r1s = realloc(r1s, sizeof(bam1_t*)*m1)));
+            }
+            assert(r1s);
+            r1s[l1++] = bam_dup1(r1);
         } else {
-            assert((r2->core.flag&4) == 0);
-            assert(writeAlignment(o2, hdr2, r2, MAPQ));
+            r2->core.qual = MAPQ;
+            if(l2+1 >= m2) {
+                m2 = l2+1;
+                kroundup32(m2);
+                assert((r2s = realloc(r2s, sizeof(bam1_t*)*m2)));
+            }
+            assert(r2s);
+            r2s[l2++] = bam_dup1(r2);
         }
     }
+
+    sortAlignments(r1s, l1);
+    sortAlignments(r2s, l2);
+    writeAlignments(o1, hdr1, r1s, l1);
+    writeAlignments(o2, hdr2, r2s, l2);
+
+    for(i=0; i<l1; i++) bam_destroy1(r1s[i]);
+    for(i=0; i<l2; i++) bam_destroy1(r2s[i]);
+    if(r1s) free(r1s);
+    if(r2s) free(r2s);
 
     bam_destroy1(r1);
     bam_destroy1(r2);
