@@ -1,1 +1,5 @@
 checkBin/checkBin
+InternalBarcodes/countInternalBarcodes
+cmpAlignments/cmpAlignments
+*.swp
+*/*.swp
