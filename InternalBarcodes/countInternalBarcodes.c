@@ -16,6 +16,7 @@ KSTREAM_INIT2(, gzFile, gzread, 16384)
 typedef struct {
     int64_t score;
     int32_t end;
+    int adapterType; //0: Truseq; 1: NEBNext
 } s_align;
 
 /*******************************************************************************
@@ -126,17 +127,26 @@ void reverseComp(kstring_t *read) {
 int hasBarcode(kstring_t *read) {
     char *adapter = "CAAGCAGAAGACGGCATACGAGAT"; //NEBNext
     char *adapter2 ="AGCACACGTCTGAACTCCAGTCAC"; //TruSeq
-    int i;
+    int i, start, end;
 
     //NEBNext
     //Allow a score of up to -12, i.e., 4 mismatches or a indel plus mismatch
     s_align *s = GlobalAlignment(read->s, read->l, adapter, 24);
+    s->adapterType = 1;
     if(s->score < -12) { //TruSeq
         free(s);
         s = GlobalAlignment(read->s, read->l, adapter2, 24);
+        s->adapterType = 0;
     }
     if(s->score >= -12) {
-        for(i=0; i<nBarcodes; i++) {
+        if(s->adapterType == 0) {
+            start = 24;
+            end = nBarcodes;
+        } else if(s->adapterType == 1) {
+            start = 0;
+            end = 24;
+        }
+        for(i=start; i<end; i++) {
             if(strncmp(barcodes+6*i, read->s+s->end+1, 6) == 0) {
                 free(s);
                 return i;
@@ -150,12 +160,21 @@ int hasBarcode(kstring_t *read) {
 
     //NEBNext
     s = GlobalAlignment(read->s, read->l, adapter, 24);
+    s->adapterType = 1;
     if(s->score < -12) { //TruSeq
         free(s);
         s = GlobalAlignment(read->s, read->l, adapter2, 24);
+        s->adapterType = 0;
     }
     if(s->score >= -12) {
-        for(i=0; i<nBarcodes; i++) {
+        if(s->adapterType == 0) {
+            start = 24;
+            end = nBarcodes;
+        } else if(s->adapterType == 1) {
+            start = 0;
+            end = 24;
+        }
+        for(i=start; i<end; i++) {
             if(strncmp(barcodes+6*i, read->s+s->end+1, 6) == 0) {
                 free(s);
                 return i;
