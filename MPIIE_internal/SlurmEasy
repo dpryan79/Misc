@@ -1,0 +1,149 @@
+#!/usr/bin/env python
+
+__description__="""
+SlurmEasy-0.1.0 - A wrapper around sbatch for submitting jobs to slurm.
+
+I've attempted as much as possible to copy over the functionality and options from SGEeasy.
+
+TODO: dependency, start delay/time, time limit
+
+Devon Ryan
+"""
+
+import argparse
+import os
+import datetime
+import subprocess
+import sys
+
+now = datetime.datetime.now()
+
+NTHREADS = 1 # -c or -S?
+QUEUE = "TestPhase" # -p
+EMAIL = None # --mail-user
+EMAIL_TYPE = "END" # --mail-type=...
+WORKING_DIR = os.getcwd() # -D
+NAME = os.getlogin() # -J
+MEM = "6G" # --mem-per-cpu=...
+CMD_TO_LOG = False
+QUEUES = ['TestPhase']
+
+# Could set a custom stdout and stderr with -o and -e
+
+def parse_args():
+    parser = argparse.ArgumentParser(prog="SlurmEasy")
+
+    #These are optional and most have defaults
+    parser.add_argument("-t", "--threads", dest="threads", metavar="INT", help="maximum number of threads (default: '{}')".format(NTHREADS), type=int, default=NTHREADS)
+    parser.add_argument("-l", "--log", dest="log_dir", metavar="logdir", help="directory for writing stdout and stderr log files (default: '{}')".format(WORKING_DIR), type=str, default=WORKING_DIR)
+    parser.add_argument("--no_log", dest="no_log", action="store_true", default=False, help="Do not write log files.")
+    parser.add_argument("-D", "--working_dir", dest="working_dir", metavar="workingdir", help="The working directory, in case you're not already in it and your commands use relative paths (default: '{}')".format(WORKING_DIR), type=str, default=WORKING_DIR)
+    parser.add_argument("-d", "--dependency", dest="dependency", metavar="INT", help="A job number to use as a dependency. Slurm will then wait until it's completed before starting this one. N.B., an integer is only labeled as being optional here to make integration with snakemake simpler.", type=int, nargs='?', const=False)
+    parser.add_argument("-c", "--cmd_to_log", dest="cmd_to_log", action="store_true", help="echo bash commands to stdout (*.o) LOG file (default: '{}')".format(CMD_TO_LOG), default=CMD_TO_LOG)
+    parser.add_argument("-n", "--name", dest="name", help="job name, which will also affect the log file names (default: '{}')".format(NAME), type=str, default=NAME)
+    parser.add_argument("-m", "--mem-per-cpu", dest="mem", metavar="MEMORY", help="maximum memory per core (e.g. '6G', default: '{}')".format(MEM), type=str, default=MEM)
+    parser.add_argument("-M", "--email", dest="email", help="Send an email to this address once the job has finished (see also --emailType) (default: ''). Note that you can specify this without an email address and {}@ie-freiburg.mpg.de will automatically be used.".format(NAME), type=str, const=True, default=False, nargs='?')
+    parser.add_argument("--emailType", dest="emailType", help="send email once the job has hit this state: BEGIN, END, FAIL or ALL finished (default: '{}')".format(EMAIL_TYPE), type=str, default=EMAIL_TYPE, choices=['BEGIN', 'END', 'FAIL', 'ALL'])
+    parser.add_argument("-q", "--queuename", dest="partition", help="The queue/partition to use (default: '{}')".format(QUEUE), type=str, default=QUEUE, choices=QUEUES)
+    parser.add_argument("-k", "--keepscript", dest="keep_script", action="store_true", default=False, help="keep auto-generated job script (*.slurm.sh)")
+    parser.add_argument("-v", "--verbose", dest="verbose", action="store_true", default=False, help="verbose output")
+
+    #Required arguments
+    parser.add_argument('cmd', metavar="COMMANDS", help="Commands (in quotes!) to be run. This can also be a script.")
+
+    args = parser.parse_args()
+
+    return args
+
+def main():
+    args = parse_args()
+
+    #Generate a shell script, line by line
+    script = ["#!/bin/bash", "#SBATCH --ntasks-per-node=1"]
+
+    # -w
+    script.append("#SBATCH -D {}".format(args.working_dir))
+
+    # -t
+    if args.threads > 1:
+        script.append("#SBATCH -c {}".format(args.threads))
+
+    # -n
+    if args.name:
+        script.append("#SBATCH -J {}".format(args.name))
+
+    # -m
+    if args.mem:
+        script.append("#SBATCH --mem-per-cpu={}".format(args.mem))
+
+    # -M and --emailType
+    if args.email is not False:
+        if args.email is True:
+            script.append("#SBATCH --mail-user={}@ie-freiburg.mpg.de".format(NAME))
+        else:
+            script.append("#SBATCH --mail-user={}".format(args.email))
+        script.append("#SBATCH --mail-type={}".format(args.emailType))
+
+    # -q
+    script.append("#SBATCH -p {}".format(args.partition))
+
+    # -l
+    if args.no_log:
+        script.append("#SBATCH -o /dev/null")
+        script.append("#SBATCH -e /dev/null")
+    else:
+        script.append("#SBATCH -o {}/{}.{}.%j.out".format(args.log_dir, args.name, now.strftime('%Y%m%d_%H%M%S')))
+        script.append("#SBATCH -e {}/{}.{}.%j.err".format(args.log_dir, args.name, now.strftime('%Y%m%d_%H%M%S')))
+
+    # -d
+    if args.dependency:
+        script.append("#SBATCH -d {}".format(args.dependency))
+
+    # Environment variables
+    script.append("""TMPDIR=/data/extended
+                     scratch=$(mktemp -p $TMPDIR -d -t tmp.XXXXXXXXXX)
+                     export TMPDIR=$scratch
+                     export TMP=$scratch
+                     export TEMP=$scratch
+                     function cleanup {
+                         rm -rf $scratch
+                     }
+                     trap cleanup SIGUSR2
+                     """)
+
+    # -c echo the command
+    if args.cmd_to_log:
+        script.append("echo \"{}\"".format(args.cmd))
+
+    # Add the command
+    script.append("srun {}".format(args.cmd))
+    script.append("cleanup")
+
+    # -v
+    if args.verbose:
+        print("\n".join(script))
+
+    ofname="{}/{}.{}.slurm.sh".format(args.log_dir, args.name, now.strftime('%Y%m%d_%H%M%S'))
+    outfile = open(ofname, "w")
+    for line in script:
+        outfile.write("{}\n".format(line))
+    outfile.close()
+
+    cmd2 = ["sbatch", ofname]
+    sp = subprocess.Popen(cmd2, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = sp.communicate()
+
+    # This is so snakemake can figure out dependencies
+    if stdout.startswith("Submitted batch"):
+        stdout = stdout[20:]
+    sys.stderr.write(stderr)
+    sys.stdout.write(stdout)
+
+    if not args.keep_script:
+        os.remove(ofname)
+        if args.verbose:
+            print("Removing sbatch script ({})".format(ofname))
+    return(sp.returncode)
+
+if __name__ == "__main__":
+    main()
