@@ -19,7 +19,7 @@ import sys
 now = datetime.datetime.now()
 
 NTHREADS = 1 # -c or -S?
-QUEUE = "TestPhase" # -p
+QUEUE = "bioinfo" # -p
 EMAIL = None # --mail-user
 EMAIL_TYPE = "END" # --mail-type=...
 WORKING_DIR = os.getcwd() # -D
@@ -142,10 +142,14 @@ def main():
     stdout, stderr = sp.communicate()
 
     # This is so snakemake can figure out dependencies
-    if stdout.startswith("Submitted batch"):
+    if str(stdout).startswith("Submitted batch"):
         stdout = stdout[20:]
-    sys.stderr.write(stderr)
-    sys.stdout.write(stdout)
+
+    # In python3, this will print b'' if empty!
+    if len(stderr):
+        sys.stderr.write(str(stderr))
+    if len(stdout):
+        sys.stdout.write(str(stdout))
 
     if not args.keep_script:
         os.remove(ofname)
