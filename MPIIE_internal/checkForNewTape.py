@@ -12,7 +12,7 @@ def getDSize(d) :
 
     Note that the number of blocks that a file occupies on the disk is used.
     """
-    blockSize = os.statvfs("/eva_data").f_bsize
+    blockSize = os.statvfs("/data/rapidus").f_bsize
     o = 0
     for root, dirs, files in os.walk(d) :
         o += sum(ceil(getsize(join(root,name))/(blockSize)) for name in files)
@@ -67,7 +67,7 @@ def writeFiles(d) :
     #Print the command to be run to actually back things up
     sys.stdout.write("run:# mt -f /dev/st0 rewind; tar -cvp  -f /dev/nst0 --index-file=%s --files=%s 2> %s\n" % (v, odirs, serr))
 
-def mainFunc(last) :
+def mainFunc(lastHiSeq, lastNextSeq) :
     """
     The main driver function.
 
@@ -75,12 +75,30 @@ def mainFunc(last) :
     """
     maxSize = 798720 #780 gigs in megs
     curSize = 0
-    dirs = glob.glob("/eva_data/sequencing_data/*_SN7001180_*")
+
+    # HiSeq
+    dirs = glob.glob("/data/rapidus/sequencing_data/*_SN7001180_*")
     dirs.sort()
     dirsToBackup = []
     for d in dirs :
         runNum = int(d.split("/")[-1].split("_")[2])
-        if(runNum <= last ) :
+        if(runNum <= lastHiSeq) :
+            continue
+        sz = getDSize(d)
+        if(curSize + sz >= maxSize) :
+            writeFiles(dirsToBackup)
+            sys.stdout.write("This tape would contain %i megs of data\n" % curSize)
+            curSize = sz
+            dirsToBackup = [d]
+        else :
+            curSize += sz
+            dirsToBackup.append(d)
+    # NextSeq
+    dirs = glob.glob("/data/rapidus/sequencing_data/*_NB501361_*")
+    dirs.sort()
+    for d in dirs :
+        runNum = int(d.split("/")[-1].split("_")[2])
+        if(runNum <= lastNextSeq ) :
             continue
         sz = getDSize(d)
         if(curSize + sz >= maxSize) :
@@ -94,11 +112,12 @@ def mainFunc(last) :
     print("The remaining files occupy %i megs of data." % curSize)
 
 parser = argparse.ArgumentParser(description="See if we have enough new data to write a tape.")
-parser.add_argument('last', metavar='LastStoredFlowcellNumber', type=int, help="The run number, for example 210 or 199, of the last backed up flow cell.")
+parser.add_argument('lastHiSeq', metavar='INT', type=int, help="The run number, for example 210 or 199, of the last backed up HiSeq flow cell.")
+parser.add_argument('lastNextSeq', metavar='INT', type=int, help="The run number, for example 1 or 10, of the last backed up NextSeq flow cell.")
 args = parser.parse_args()
 
-if(args.last is None) :
+if(args.lastHiSeq is None or args.lastNextSeq is None) :
     parser.print_help()
     sys.exit()
 
-mainFunc(args.last)
+mainFunc(args.lastHiSeq, args.lastNextSeq)
