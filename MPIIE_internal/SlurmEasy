@@ -95,7 +95,7 @@ def main():
         script.append("#SBATCH -o {}/{}.{}.%j.out".format(args.log_dir, args.name, now.strftime('%Y%m%d_%H%M%S')))
         script.append("#SBATCH -e {}/{}.{}.%j.err".format(args.log_dir, args.name, now.strftime('%Y%m%d_%H%M%S')))
     try:
-        os.makedirs(args.log_dir):
+        os.makedirs(args.log_dir)
     except OSError as exc:
         # This will only throw an error if the user lacks permissions or there's a similar error
         if exc.errno == errno.EEXIST and os.path.isdir(path):
