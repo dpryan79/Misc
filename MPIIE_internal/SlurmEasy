@@ -98,7 +98,7 @@ def main():
         os.makedirs(args.log_dir)
     except OSError as exc:
         # This will only throw an error if the user lacks permissions or there's a similar error
-        if exc.errno == errno.EEXIST and os.path.isdir(path):
+        if type(exc) == FileExistsError:
             pass
         else:
             raise
