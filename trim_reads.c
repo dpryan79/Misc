@@ -34,6 +34,7 @@ typedef struct {
     int mspi;
     int taqi;
     int non_directional;
+    int polyA;
 } config;
 
 typedef struct {
@@ -53,6 +54,7 @@ typedef struct {
     int Threeprime_adapter_trimmed2;	//This is only needed for RRBS!
     int Fiveprime_adapter_trimmed1;	//This could be needed in the future
     int Fiveprime_adapter_trimmed2;	//This could be needed in the future
+    int polyA_trimmed;		//Has the read been 3' polyA trimmed? 0: No, 1: Yes
 } seq_read;
 
 //See cutadapt
@@ -503,6 +505,38 @@ void quality_trim(seq_read *read, config config) {
     if(trimmed) read->quality_trimmed = trimmed;
 }
 
+void trimPolyA(seq_read *read, config *config) {
+    int l = strlen(read->sequence1), i, j = 0;
+
+    read->polyA_trimmed = 0;
+    if(l > 0) {
+        j = 0;
+        for(i = l-1; i > 0; i--) {
+            if(read->sequence1[i] == 'A') j++;
+            else break;
+        }
+        if(j > config->polyA) {
+            read->sequence1[l-j] = '\0';
+            read->qual1[l-j] = '\0';
+            read->polyA_trimmed = 1;
+        }
+    }
+
+    l = strlen(read->sequence2);
+    if(l > 0) {
+        j = 0;
+        for(i = l-1; i > 0; i--) {
+            if(read->sequence2[i] == 'A') j++;
+            else break;
+        }
+        if(j > config->polyA) {
+            read->sequence2[l-j] = '\0';
+            read->qual2[l-j] = '\0';
+            read->polyA_trimmed = 1;
+        }
+    }
+}
+
 void usage(char *prog) {
     printf("%s [options] [-1 fastq_1.gz -2 fastq_2.gz | fastq.gz]\n", prog);
     printf("\n\
@@ -549,6 +583,10 @@ Output files will be gzipped and named by removing the .fq.gz or \n\
              reads beginning with CGA or CAA (i.e., possibly starting\n\
              with unreliable filled in bases) will have the first 2 bp\n\
              removed.\n\
+\n\
+    --polyA  The maximum number of 3' As at the end of a read to allow. If more\n\
+             than this are present, then all As will be trimmed off. A value of\n\
+             0 (the default) indicates to ignore polyAs.\n\
 \n");
 }
 
@@ -616,14 +654,14 @@ int main(int argc, char *argv[]) {
     char *file1 = NULL, *file2 = NULL;
     char *adapter = NULL;
     char *line = malloc(MAXREAD*sizeof(char));
-    char *linep = line; //This is a hack, due to zlib functions possibly screwing up pointers!
     int maxline = MAXREAD;  //This is the buffer size that gzgets will read into
                             //it can be increased internally
     int total_reads = 0;
     int total_adapter_trimmed = 0, total_discarded = 0;
     int total_quality_trimmed = 0, total_orphaned = 0;
+    int total_polyA_trimmed = 0;
     int keep = 0;
-    FILE *f1, *f2, *of1, *of2, *of1_orphaned, *of2_orphaned;
+    FILE *f1, *f2, *of1, *of2, *of1_orphaned = NULL, *of2_orphaned = NULL;
     config config;
     seq_read *read = malloc(sizeof(seq_read));
     char *p = line, *p2;
@@ -641,6 +679,7 @@ int main(int argc, char *argv[]) {
     config.mspi = 0;
     config.taqi = 0;
     config.non_directional = 0;
+    config.polyA = 0;
 
     //Read in the input
     for(i=1; i<argc; i++) {
@@ -683,6 +722,9 @@ int main(int argc, char *argv[]) {
         } else if(strcmp(argv[i], "-1") == 0) {
             i++;
             file1 = argv[i];
+        } else if(strcmp(argv[i], "--polyA") == 0) {
+            i++;
+            config.polyA = atoi(argv[i]);
         } else {
             if(strncmp(argv[i], "-", 1) == 0) {
                 //Got an unmatched option
@@ -803,9 +845,14 @@ int main(int argc, char *argv[]) {
             read->adapter_trimmed = 1;
         }
 
+        if(config.polyA > 0) {
+            trimPolyA(read, &config);
+        }
+
         //Multithreading is done, only the main process should write to files!
         if(read->quality_trimmed) total_quality_trimmed++;
         if(read->adapter_trimmed) total_adapter_trimmed++;
+        if(read->polyA_trimmed) total_polyA_trimmed++;
         if(strlen(read->sequence1) >= config.min_length) {
             if(file2 != NULL) { //Paired-end
                 if(strlen(read->sequence2) >= config.min_length) {
@@ -854,6 +901,7 @@ int main(int argc, char *argv[]) {
     printf("There were %i reads processed.\n", total_reads);
     printf("\t%i\tadapter trimmed\n", total_adapter_trimmed);
     printf("\t%i\tquality trimmed\n", total_quality_trimmed);
+    printf("\t%i\t3' polyA trimmed\n", total_polyA_trimmed);
     printf("\t%i\torphaned\n", total_orphaned);
     printf("\t%i\tdiscarded\n", total_discarded);
 
