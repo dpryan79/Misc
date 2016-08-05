@@ -761,7 +761,7 @@ int main(int argc, char *argv[]) {
     }
     f1 = popen(cmd, "r");
     of1 = determine_name(file1, 0);
-    if(keep) of1_orphaned = determine_name(file1, 1);
+    if(config.keep) of1_orphaned = determine_name(file1, 1);
     if(file2 != NULL) {
         if(strcmp(p2, ".gz") == 0 || strcmp(p2, ".GZ") == 0) {
             sprintf(cmd, "zcat %s", file2);
@@ -772,7 +772,7 @@ int main(int argc, char *argv[]) {
         }
         f2 = popen(cmd, "r");
         of2 = determine_name(file2, 0);
-        if(keep) of2_orphaned = determine_name(file2, 1);
+        if(config.keep) of2_orphaned = determine_name(file2, 1);
     }
     free(cmd);
 
