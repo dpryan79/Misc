@@ -1,12 +1,9 @@
 #!/usr/bin/env python
-"""
-To Do: Should allow also specifying directories and then add everything under then with an appropriate --basePath
-"""
 from bioblend.galaxy import GalaxyInstance
 from bioblend.galaxy.objects import GalaxyInstance as GI
 import argparse
 import sys
-import os.path
+import os
 import glob
 
 
@@ -133,6 +130,17 @@ def checkExists(gi, gi2, libID, folderID, fName):
     return False
 
 
+def fileList(d):
+    """
+    Given a directory, return a list of all files in all subdirectories
+    """
+    files = []
+    for (dpath, dnames, filenames) in os.walk(d):
+        for fname in filenames:
+            files.append("{}/{}".format(dpath, fname))
+    return files
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--force", "-f", action="store_true", default=False, help="If specified, files already present will be added again.")
 parser.add_argument("--basePath", help="This is removed from each file name and the remainder is appended to 'libName' before adding each file. This is convenient with globbing multiple folders where the folder structure should be maintained.")
@@ -163,24 +171,36 @@ if not args.path.startswith("/"):
 folderID = getFolderID(gi, libID, args.path)
 
 for foo in args.fglobs:
-    files = glob.glob(foo)
+    # handle any globs
+    globs = glob.glob(foo)
 
-    for fName in files:
-        if args.basePath:
-            # If we have a base path, then deal with it.
-            bname = os.path.dirname(fName)
-            assert(fName.startswith(args.basePath))
-            newPath = args.path + bname[len(args.basePath):]
-            # if args.path == "/", though, we end up with "//something..."
-            if newPath.startswith("//"):
-                newPath = newPath[1:]
-            folderID = getFolderID(gi, libID, newPath)
+    for g in globs:
+        # If we have a directory, make a list of files
+        # If we have a file, put it in a list
+        if os.isdir(g):
+            fileList = getFiles(g)
+            if not args.basePath:
+                args.basePath = g
+        else:
+            fileList = [g]
 
-        # If the file already exists then don't add multiple copies unless --force is used.
-        if not args.force:
-            if checkExists(gi, gi2, libID, folderID, fName):
-                sys.stderr.write("Skipping {}, already added\n".format(os.path.basename(fName)))
-                continue
-        f = addFileToLibraryFolder(gi, libID, folderID, fName, file_type=getFileType(fName))
-        if not f:
-            sys.exit("There was an error while adding {}".format(fName))
+        for fName in fileList:
+            # iterate over the files
+            if args.basePath:
+                # If we have a base path, then deal with it.
+                bname = os.path.dirname(fName)
+                assert(fName.startswith(args.basePath))
+                newPath = args.path + bname[len(args.basePath):]
+                # if args.path == "/", though, we end up with "//something..."
+                if newPath.startswith("//"):
+                    newPath = newPath[1:]
+                folderID = getFolderID(gi, libID, newPath)
+    
+            # If the file already exists then don't add multiple copies unless --force is used.
+            if not args.force:
+                if checkExists(gi, gi2, libID, folderID, fName):
+                    sys.stderr.write("Skipping {}, already added\n".format(os.path.basename(fName)))
+                    continue
+            f = addFileToLibraryFolder(gi, libID, folderID, fName, file_type=getFileType(fName))
+            if not f:
+                sys.exit("There was an error while adding {}".format(fName))
