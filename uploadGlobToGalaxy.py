@@ -75,19 +75,14 @@ def addFileToLibraryFolder(gi, libID, folderID, fileName, file_type='auto', dbke
     else:
         link_data_only = 'copy_files'
     
-    try:
-        rv = gi.libraries.upload_from_galaxy_filesystem(libID,
-                                                        fileName,
-                                                        folder_id=folderID,
-                                                        file_type=file_type,
-                                                        dbkey=dbkey,
-                                                        link_data_only=link_data_only,
-                                                        roles=roles)
-        return rv
-    except:
-        sys.stderr.write("Received the following error while adding '{}': '{}'\n".format(fileName, sys.exc_info()[0]))
-        sys.stderr.write("libID {} fileName '{}' folderID {} file_type {}\n".format(libID, fileName, folderID, file_type))
-        return None
+    rv = gi.libraries.upload_from_galaxy_filesystem(libID,
+                                                    fileName,
+                                                    folder_id=folderID,
+                                                    file_type=file_type,
+                                                    dbkey=dbkey,
+                                                    link_data_only=link_data_only,
+                                                    roles=roles)
+    return rv
 
 
 def addFileToLibrary(gi, libraryName, path, fileName, file_type='auto', dbkey='?', link=True, roles=''):
@@ -113,24 +108,21 @@ def getFileType(fName):
     return "auto"
 
 
-def checkExists(gi, gi2, libID, folderID, fName):
+def checkExists(datasets, folderID, fName):
     """
     Return true if there's a file named fName in a folder with folderID in side the library with ID libID. Otherwise, return False
-
-    It's a bit silly that this uses the object wrappers, while nothing else does, but so it goes.
+    For fastq.gz files, the file name in Galaxy might be lacking the .gz extension when we check...
     """
-    libName = gi.libraries.get_libraries(library_id=libID)[0]["name"]
-    l = gi2.libraries.list(name=libName)[0]
-    fName = os.path.basename(fName)
-
-    datasets = l.get_datasets()
     for dataset in datasets:
-        if dataset.name == fName and dataset.wrapped["folder_id"] == folderID:
-            return True
+        if dataset.wrapped["folder_id"] == folderID:
+            if dataset.name == os.path.basename(fName):
+                return True
+            if fName.endswith(".fastq.gz") and os.path.basename(fName)[:-3] == dataset.name:
+                return True
     return False
 
 
-def fileList(d):
+def getFiles(d):
     """
     Given a directory, return a list of all files in all subdirectories
     """
@@ -153,15 +145,19 @@ args = parser.parse_args()
 f = open("{}/.galaxy_key".format(os.path.expanduser("~")))
 userKey = f.readline().strip()
 f.close()
-url = "http://localhost:8888"
+url = "http://galaxy.ie-freiburg.mpg.de"
 
 gi = GalaxyInstance(url=url, key=userKey)
-if not args.force:
-    # There's no way to get datasets in a library without using the wrapper clients
-    gi2 = GI(url=url, api_key=userKey)
+# There's no way to get datasets in a library without using the wrapper clients
+gi2 = GI(url=url, api_key=userKey)
 
 # memoize the library ID
 libID = getLibID(gi, args.libName)
+
+# Use the correct library name
+_ = gi.libraries.get_libraries(library_id=libID)[0]["name"]
+l = gi2.libraries.list(name=_)[0]
+currentDatasets = l.get_datasets()
 
 # path needs to start with a "/"
 if not args.path.startswith("/"):
@@ -177,12 +173,16 @@ for foo in args.fglobs:
     for g in globs:
         # If we have a directory, make a list of files
         # If we have a file, put it in a list
-        if os.isdir(g):
+        if os.path.isdir(g):
             fileList = getFiles(g)
             if not args.basePath:
                 args.basePath = g
         else:
             fileList = [g]
+
+        # Trim "/" from args.basePath
+        if args.basePath:
+            args.basePath = args.basePath.rstrip("/")
 
         for fName in fileList:
             # iterate over the files
@@ -198,7 +198,7 @@ for foo in args.fglobs:
     
             # If the file already exists then don't add multiple copies unless --force is used.
             if not args.force:
-                if checkExists(gi, gi2, libID, folderID, fName):
+                if checkExists(currentDatasets, folderID, fName):
                     sys.stderr.write("Skipping {}, already added\n".format(os.path.basename(fName)))
                     continue
             f = addFileToLibraryFolder(gi, libID, folderID, fName, file_type=getFileType(fName))

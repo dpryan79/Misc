@@ -45,8 +45,10 @@ dir.create(outdir, showWarnings = FALSE)
 txt_file <- paste(outdir,"results.txt",sep="")
 
 x  <- cbind(
-	read.delim(ip_mean_file, head=F, colClasses=c(rep("NULL",3), "numeric"), na.strings="nan"), 
-	read.delim(input_mean_file, head=F, colClasses=c(rep("NULL",3), "numeric"), na.strings="nan"))
+	read.delim(ip_mean_file, head=F, na.strings="nan"), 
+	read.delim(input_mean_file, head=F, na.strings="nan"))
+#	read.delim(ip_mean_file, head=F, colClasses=c(rep("NULL",3), "numeric"), na.strings="nan"), 
+#	read.delim(input_mean_file, head=F, colClasses=c(rep("NULL",3), "numeric"), na.strings="nan"))
 
 errors = rep(0,3)
 x = x[order(x[,1], na.last=FALSE),]
@@ -55,11 +57,30 @@ x[is.na(x)] <- 0
 ######################
 ## Calculations
 ######################
+
+#Initialize some vectors
+ip = c(rep(0, 20000))
+input = c(rep(0, 20000))
+
+#Fill in the values
+tab = table(x[,1])
+labs = lapply(labels(tab), as.numeric)[[1]]
+for(i in seq(length(tab))) {
+    ip[labs[i] + 1] = as.numeric(tab[i])
+}
+tab = table(x[,2])
+labs = lapply(labels(tab), as.numeric)[[1]]
+for(i in seq(length(tab))) {
+    input[labs[i] + 1] = as.numeric(tab[i])
+}
+
 n = nrow(x)
 
 cs1 = cumsum(x[,1])
 cs2 = cumsum(x[,2])
  
+# Interpolate to avoid zeros
+
 s1 = cs1[n]
 s2 = cs2[n]
 
