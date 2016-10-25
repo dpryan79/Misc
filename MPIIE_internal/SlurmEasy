@@ -18,7 +18,7 @@ import sys
 
 now = datetime.datetime.now()
 
-NTHREADS = 1 # -c or -S?
+NTHREADS = 6 # -c or -S?
 QUEUE = "bioinfo" # -p
 EMAIL_TYPE = "ALL" # --mail-type=...
 WORKING_DIR = os.getcwd() # -D
@@ -27,6 +27,7 @@ MEM = "6G" # --mem-per-cpu=...
 CMD_TO_LOG = False
 QUEUES = ['bioinfo', 'defqueue', 'rapidus']
 ENV_STRING = "export LC_ALL=C; export LANG=en_US.UTF-8; export LANGUAGE=en_US.UTF-8;"
+MAINTEMP = "/data/extended/"
 
 # Could set a custom stdout and stderr with -o and -e
 
@@ -38,6 +39,7 @@ def parse_args():
     parser.add_argument("-l", "--log", dest="log_dir", metavar="logdir", help="directory for writing stdout and stderr log files (default: '{}')".format(WORKING_DIR), type=str, default=WORKING_DIR)
     parser.add_argument("--no_log", dest="no_log", action="store_true", default=False, help="Do not write log files.")
     parser.add_argument("-D", "--working_dir", dest="working_dir", metavar="workingdir", help="The working directory, in case you're not already in it and your commands use relative paths (default: '{}')".format(WORKING_DIR), type=str, default=WORKING_DIR)
+    parser.add_argument("--tempdir", dest="tempdir", metavar="tempdir", help="User temp directory (default: '{}/tmp.XXXXXXXXXX')".format(MAINTEMP), type=str, default=MAINTEMP)
     parser.add_argument("-d", "--dependency", dest="dependency", metavar="INT", help="A job number to use as a dependency. Slurm will then wait until it's completed before starting this one. N.B., an integer is only labeled as being optional here to make integration with snakemake simpler.", type=int, nargs='?', const=False)
     parser.add_argument("-c", "--cmd_to_log", dest="cmd_to_log", action="store_true", help="echo bash commands to stdout (*.o) LOG file (default: '{}')".format(CMD_TO_LOG), default=CMD_TO_LOG)
     parser.add_argument("-n", "--name", dest="name", help="job name, which will also affect the log file names (default: '{}')".format(NAME), type=str, default=NAME)
@@ -109,17 +111,27 @@ def main():
         script.append("#SBATCH -d {}".format(args.dependency))
 
     # Environment variables
-    script.append("""TMPDIR=/data/extended
-                    scratch=$(mktemp -p $TMPDIR -d -t tmp.XXXXXXXXXX)
-                    export TMPDIR=$scratch
-                    export TMP=$scratch
-                    export TEMP=$scratch
-                    %s
-                    function cleanup {
-                        rm -rf $scratch
-                    }
-                    trap cleanup SIGUSR2
-                    """ % (args.env_string))
+    if MAINTEMP == args.tempdir:
+        script.append("""
+TMPDIR=%s
+scratch=$(mktemp -p $TMPDIR -d -t tmp.XXXXXXXXXX)""" % MAINTEMP)
+    else:
+        script.append("""
+TMPDIR=%s
+mkdir $TMPDIR
+scratch=$TMPDIR""" % args.tempdir)
+
+    script.append("""
+export TMPDIR=$scratch
+export TMP=$scratch
+export TEMP=$scratch
+%s
+function cleanup {
+cd /
+    rm -rf $scratch
+}
+trap cleanup SIGUSR2""" % args.env_string)
+
 
     # -c echo the command
     if args.cmd_to_log:
