@@ -133,74 +133,86 @@ def getFiles(d):
     return files
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--force", "-f", action="store_true", default=False, help="If specified, files already present will be added again.")
-parser.add_argument("--basePath", help="This is removed from each file name and the remainder is appended to 'libName' before adding each file. This is convenient with globbing multiple folders where the folder structure should be maintained.")
-parser.add_argument("libName", help="The library name (under shared-data -> data libraries")
-parser.add_argument("path", default="/", help="The path of folders to put the file/files into.")
-parser.add_argument("fglobs", help="file name(s), which can also be globs (e.g., '*.fastq.gz')", nargs="+")
-args = parser.parse_args()
+def parseArgs():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--force", "-f", action="store_true", default=False, help="If specified, files already present will be added again.")
+    parser.add_argument("--basePath", help="This is removed from each file name and the remainder is appended to 'libName' before adding each file. This is convenient with globbing multiple folders where the folder structure should be maintained.")
+    parser.add_argument("libName", help="The library name (under shared-data -> data libraries")
+    parser.add_argument("path", default="/", help="The path of folders to put the file/files into.")
+    parser.add_argument("fglobs", help="file name(s), which can also be globs (e.g., '*.fastq.gz')", nargs="+")
+    return parser
 
-# Read in the userKey and set the server
-f = open("{}/.galaxy_key".format(os.path.expanduser("~")))
-userKey = f.readline().strip()
-f.close()
-url = "http://galaxy.ie-freiburg.mpg.de"
 
-gi = GalaxyInstance(url=url, key=userKey)
-# There's no way to get datasets in a library without using the wrapper clients
-gi2 = GI(url=url, api_key=userKey)
+def main(args=None):
+    args = parseArgs(args).parse_args()
 
-# memoize the library ID
-libID = getLibID(gi, args.libName)
+    # Read in the userKey and set the server
+    f = open("{}/.galaxy_key".format(os.path.expanduser("~")))
+    userKey = f.readline().strip()
+    f.close()
+    url = "http://galaxy.ie-freiburg.mpg.de"
 
-# Use the correct library name
-_ = gi.libraries.get_libraries(library_id=libID)[0]["name"]
-l = gi2.libraries.list(name=_)[0]
-currentDatasets = l.get_datasets()
+    gi = GalaxyInstance(url=url, key=userKey)
+    # There's no way to get datasets in a library without using the wrapper clients
+    gi2 = GI(url=url, api_key=userKey)
 
-# path needs to start with a "/"
-if not args.path.startswith("/"):
-    args.path = "/{}".format(args.path)
+    # memoize the library ID
+    libID = getLibID(gi, args.libName)
 
-# memoize the folder ID
-folderID = getFolderID(gi, libID, args.path)
+    # Use the correct library name
+    _ = gi.libraries.get_libraries(library_id=libID)[0]["name"]
+    l = gi2.libraries.list(name=_)[0]
+    currentDatasets = l.get_datasets()
 
-for foo in args.fglobs:
-    # handle any globs
-    globs = glob.glob(foo)
+    # path needs to start with a "/"
+    if not args.path.startswith("/"):
+        args.path = "/{}".format(args.path)
 
-    for g in globs:
-        # If we have a directory, make a list of files
-        # If we have a file, put it in a list
-        if os.path.isdir(g):
-            fileList = getFiles(g)
-            if not args.basePath:
-                args.basePath = g
-        else:
-            fileList = [g]
+    # memoize the folder ID
+    folderID = getFolderID(gi, libID, args.path)
 
-        # Trim "/" from args.basePath
-        if args.basePath:
-            args.basePath = args.basePath.rstrip("/")
+    for foo in args.fglobs:
+        # handle any globs
+        globs = glob.glob(foo)
 
-        for fName in fileList:
-            # iterate over the files
+        for g in globs:
+            # If we have a directory, make a list of files
+            # If we have a file, put it in a list
+            if os.path.isdir(g):
+                fileList = getFiles(g)
+                if not args.basePath:
+                    args.basePath = g
+            else:
+                fileList = [g]
+
+            # Trim "/" from args.basePath
             if args.basePath:
-                # If we have a base path, then deal with it.
-                bname = os.path.dirname(fName)
-                assert(fName.startswith(args.basePath))
-                newPath = args.path + bname[len(args.basePath):]
-                # if args.path == "/", though, we end up with "//something..."
-                if newPath.startswith("//"):
-                    newPath = newPath[1:]
-                folderID = getFolderID(gi, libID, newPath)
+                args.basePath = args.basePath.rstrip("/")
+
+            for fName in fileList:
+                # iterate over the files
+                if args.basePath:
+                    # If we have a base path, then deal with it.
+                    bname = os.path.dirname(fName)
+                    assert(fName.startswith(args.basePath))
+                    newPath = args.path + bname[len(args.basePath):]
+                    # if args.path == "/", though, we end up with "//something..."
+                    if newPath.startswith("//"):
+                        newPath = newPath[1:]
+                    folderID = getFolderID(gi, libID, newPath)
     
-            # If the file already exists then don't add multiple copies unless --force is used.
-            if not args.force:
-                if checkExists(currentDatasets, folderID, fName):
-                    sys.stderr.write("Skipping {}, already added\n".format(os.path.basename(fName)))
-                    continue
-            f = addFileToLibraryFolder(gi, libID, folderID, fName, file_type=getFileType(fName))
-            if not f:
-                sys.exit("There was an error while adding {}".format(fName))
+                # If the file already exists then don't add multiple copies unless --force is used.
+                if not args.force:
+                    if checkExists(currentDatasets, folderID, fName):
+                        sys.stderr.write("Skipping {}, already added\n".format(os.path.basename(fName)))
+                        continue
+                f = addFileToLibraryFolder(gi, libID, folderID, fName, file_type=getFileType(fName))
+                if not f:
+                    sys.exit("There was an error while adding {}".format(fName))
+
+
+if __name__ == "__main__":
+    args = None
+    if len(sys.argv) == 1:
+        args = ["--help"]
+    main(args)
