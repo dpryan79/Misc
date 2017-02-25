@@ -17,10 +17,10 @@ class FooDirective(Directive):
         """
         env = self.state.document.settings.env
 
-        sec2 = nodes.section(ids=['Commands:'])
+        sec2 = nodes.section(ids=['Commands:'], classes=['section'])
         sec2.document = self.state.document
         sec2 += nodes.title('Commands:', 'Commands:')
-        subsec = nodes.section(ids=['BED-file'])
+        subsec = nodes.section(ids=['BED-file'], classes=['section'])
         sec2 += subsec
         subsec += nodes.title('BED-file', 'BED-file')
 
@@ -31,22 +31,11 @@ class FooDirective(Directive):
         n2 = nodes.option_list_item('',
              nodes.option_group('', nodes.option_string(text='--sub-opt2')),
              nodes.description('', nodes.paragraph(text='I am the help for the --sub-opt2 option')))
-        #sub_optList = nodes.option_list('', *[n1, n2])
         subsec += nodes.option_list('', *[n1, n2])
 
-        # Title/section for the sub-command
-        #subsec = nodes.section(ids=['BED-file'])
-        #subsec += nodes.title('BED-file', 'BED-file', title_level=2)
-        #subsec += sub_optList
-
-        # Title for all sub-commands
-        #title = nodes.title('', text='Commands:')
-        #subsec = nodes.section('', *[title, subsec], ids=['Commands:'])
-
         # A title for the option list
-        #optTitle = nodes.title('', text='Options:')
-        sec = nodes.section(ids=['Options:'])
-        sec = nodes.title('Options:', 'Options:')
+        sec = nodes.section(ids=['Options:'], classes=['section'])
+        sec += nodes.title('Options:', 'Options:')
 
         # A more general option list
         n1 = nodes.option_list_item('',

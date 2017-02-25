@@ -1,18 +1,12 @@
-Table of contents
+Main page
+=========
 
-.. contents::
-   :local:
+blah blah blah
 
-Finished with TOC
+.. toctree::
+    :maxdepth: 2
 
-Main
-====
+    foo
+    bar
 
-Content in Main. Next comes the `foo` directive.
-
-.. foo::
-
-BAR
-===
-
-BAR content
+Additional blah blah blah
