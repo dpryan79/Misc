@@ -22,7 +22,7 @@ default	Sample3
 
 Any observed barcode that does not match a barcode listed in the file (with a possible mismatch of 1) will be written to the sample specified by 'default'. Note that all barcodes must be of the same length.
 """)
-    parser.add_argument('output', metavar='output_basename', help="Base name for output. For paired-end input, the output will be written to output_basename_R1.fastq.gz and output_basename_R2.fastq.gz")
+    parser.add_argument('output', metavar='output_basename', help="Base output directory, which must exist. As an example, if a given PE read has the barcode ACTACT, then it will be written to /output_basename/Sample_R1.fastq.gz and /output_basename/Sample_R2.fastq.gz")
     parser.add_argument('input', metavar='sample.fastq.gz', nargs="+", help="One or two gzipped fastq files. If two files are specified, it's assumed that the dataset is paired-end.")
     args = parser.parse_args(args)
 
