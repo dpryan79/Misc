@@ -4,6 +4,7 @@ import os
 import argparse
 import glob
 from multiprocessing import Pool
+import subprocess
 import gzip
 try:
     import editdistance as ed
@@ -13,8 +14,8 @@ except:
 
 def parseArgs(args=None):
     parser = argparse.ArgumentParser(description="Process RELACS reads by moving a barcode into the header and writing output to per-barcode files.")
-    parser.add_argument('-p', '--numThreads', help='Number of threads to use. Note that there will only ever be a single thread used per illumina sample, so there is no reason so specify more threads than samples.', type=int, default=1)
-    parser.add_argument('-b', '--buffer', help='Number of bases of "buffer" to ignore after the barcode. (default: 1)', type=int, default=1)
+    parser.add_argument('-p', '--numThreads', help='Number of threads to use. Note that there will only ever be a single thread used per illumina sample, so there is no reason so specify more threads than samples. Note also that the effective number of threads used will always be higher than this, since compression/decompression for each file occurs in a separate thread.', type=int, default=1)
+    parser.add_argument('-b', '--buffer', help='Number of bases of "buffer" to ignore after the barcode. (default: 0)', type=int, default=0)
     parser.add_argument('sampleTable', help="""A tab-separated table with three columns: Illumina sample	barcode	sample_name
 
 An example is:
@@ -58,32 +59,38 @@ def readSampleTable(sampleTable):
     return (d, bcLen)
 
 
-def matchSample(sequence, oDict, bcLen, buffer):
+def matchSample(sequence, sequence2, oDict, bcLen, buffer):
     """
     Match a barcode against the sample sheet with a possible edit distance of 1.
 
     Returns a tuple of the list of file pointers and True/False (whether the "default" output is being used)
     """
     bc = sequence[buffer:bcLen]
+    bc2 = sequence2[:bcLen] if sequence2 else None  # For whatever reason, padding isn't used
     if bc in oDict:
-        return (bc, True)
+        if bc2 and ed.eval(bc, bc2) < 2:
+            return (bc, True)
+        if not bc2:
+            return (bc, True)
 
     # Look for a 1 base mismatch
     for k, v in oDict.items():
         if ed.eval(k, bc) == 1:
-            return (k, True)
+            if not bc2:
+                return (k, True)
+            if bc2 and ed.eval(bc, bc2) < 2:
+                return (k, True)
 
     return ("default", False)
 
 
-def writeRead(lineList, of, bc, args, doTrim=True):
+def writeRead(lineList, of, bc, bcLen, args, doTrim=True):
     """
     Trim the read as specified and write to the appropriate file.
 
     Return the modified read name (for read #2, if needed)
     """
     rname = lineList[0]
-    bcLen = len(bc)
     if doTrim:
         # Trim off the barcode
         lineList[1] = lineList[1][bcLen + args.buffer:]
@@ -105,7 +112,7 @@ def writeRead(lineList, of, bc, args, doTrim=True):
     return rname
 
 
-def writeRead2(lineList, of):
+def writeRead2(lineList, of, bcLen, args, doTrim=True):
     # Fix the read name so it's read #2 rather than #1
     rname = lineList[0]
     rname = rname.split()
@@ -115,6 +122,11 @@ def writeRead2(lineList, of):
     if rname[-1] != '\n':
         rname += '\n'
 
+    if doTrim:
+        # trim off the barcode
+        lineList[1] = lineList[1][bcLen + args.buffer:]
+        lineList[3] = lineList[3][bcLen + args.buffer:]
+
     of.write(rname)
     of.write(lineList[1])
     of.write(lineList[2])
@@ -122,36 +134,39 @@ def writeRead2(lineList, of):
 
 
 def processPaired(args, sDict, bcLen, read1, read2):
-    f1 = gzip.GzipFile(read1)
-    f2 = gzip.GzipFile(read2)
+    f1_ = subprocess.Popen("gunzip -c {}".format(read1), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    f2_ = subprocess.Popen("gunzip -c {}".format(read2), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    f1 = f1_.stdout
+    f2 = f2_.stdout
 
     for line1_1 in f1:
-        line1_2 = f1.readline()
-        line1_3 = f1.readline()
-        line1_4 = f1.readline()
-        line2_1 = f2.readline()
-        line2_2 = f2.readline()
-        line2_3 = f2.readline()
-        line2_4 = f2.readline()
+        line1_2 = f1.next()
+        line1_3 = f1.next()
+        line1_4 = f1.next()
+        line2_1 = f2.next()
+        line2_2 = f2.next()
+        line2_3 = f2.next()
+        line2_4 = f2.next()
 
-        (bc, isDefault) = matchSample(line1_2, sDict, bcLen, args.buffer)
+        (bc, isDefault) = matchSample(line1_2, line2_2, sDict, bcLen, args.buffer)
 
-        rname = writeRead([line1_1, line1_2, line1_3, line1_4], sDict[bc][0], bc, args, isDefault)
-        writeRead2([rname , line2_2, line2_3, line2_4], sDict[bc][1])
+        rname = writeRead([line1_1, line1_2, line1_3, line1_4], sDict[bc][0], bc, bcLen, args, isDefault)
+        writeRead2([rname , line2_2, line2_3, line2_4], sDict[bc][1], bcLen, args, isDefault)
 
     f1.close()
     f2.close()
 
 
 def processSingle(args, sDict, bcLen, read1):
-    f1 = gzip.GzipFile(read1)
+    f1_ = subprocess.Popen("gunzip -c {}".format(read1), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    f1 = f1_.stdout
 
-    for line1_1 in f1.readline():
-        line1_2 = f1.readline()
-        line1_3 = f1.readline()
-        line1_4 = f1.readline()
-        (bc, isDefault) = matchSample(line1_2, sDict, bcLen, args.buffer)
-        writeRead([line1_1, line1_2, line1_3, line1_4], sDict[bc], bc, args, isDefault)
+    for line1_1 in f1:
+        line1_2 = f1.next()
+        line1_3 = f1.next()
+        line1_4 = f1.next()
+        (bc, isDefault) = matchSample(line1_2, None, sDict, bcLen, args.buffer)
+        writeRead([line1_1, line1_2, line1_3, line1_4], sDict[bc], bc, bcLen, args, isDefault)
 
     f1.close()
 
@@ -179,17 +194,21 @@ def wrapper(foo):
     oDict = dict()
     if R2 is not None:
         for k, v in sDict.items():
-            oDict[k] = [gzip.GzipFile("{}/{}/{}_R1.fastq.gz".format(args.output, d, v), "w"),
-                        gzip.GzipFile("{}/{}/{}_R2.fastq.gz".format(args.output, d, v), "w")]
+            oDict[k] = [subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R1.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE).stdin,
+                        subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R2.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE).stdin]
         if 'default' not in oDict:
-            oDict['default'] = [gzip.GzipFile("{}/{}/unknown_R1.fastq.gz".format(args.output, d), "w"),
-                                gzip.GzipFile("{}/{}/unknown_R2.fastq.gz".format(args.output, d), "w")]
+            k = 'default'
+            v = 'unknown'
+            oDict[k] = [subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R1.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE).stdin,
+                        subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R2.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE).stdin]
         processPaired(args, oDict, bcLen, R1, R2)
     else:
         for k, v in ssDict.items():
-            oDict[k] = [gzip.GzipFile("{}/{}/{}_R1.fastq.gz".format(args.output, d, v), "w")]
+            oDict[k] = [subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R1.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE).stdin]
         if 'default' not in oDict:
-            oDict['default'] = [gzip.GzipFile("{}/{}/unknown_R1.fastq.gz".format(args.output, d), "w")]
+            k = 'default'
+            v = 'unknown'
+            oDict[k] = [subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R1.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE).stdin]
         processSingle(args, oDict, bcLen, R1)
 
 
