@@ -1,7 +1,7 @@
 #!/package/python/3.4.3/bin/python3
 
 __description__="""
-SlurmEasy-0.1.0 - A wrapper around sbatch for submitting jobs to slurm.
+SlurmEasy-0.1.1 - A wrapper around sbatch for submitting jobs to slurm.
 
 I've attempted as much as possible to copy over the functionality and options from SGEeasy.
 
@@ -23,10 +23,10 @@ QUEUE = "bioinfo" # -p
 EMAIL_TYPE = "ALL" # --mail-type=...
 WORKING_DIR = os.getcwd() # -D
 NAME = os.getlogin() # -J
-MEM = "6G" # --mem-per-cpu=...
+MEM = "5781" # --mem-per-cpu=... 3541 5781
 CMD_TO_LOG = False
 QUEUES = ['bioinfo', 'defqueue', 'rapidus']
-ENV_STRING = "export LC_ALL=C; export LANG=en_US.UTF-8; export LANGUAGE=en_US.UTF-8;"
+ENV_STRING = "export LC_ALL=en_US.UTF-8; export LANG=en_US.UTF-8; export LANGUAGE=en_US.UTF-8;"
 MAINTEMP = "/data/extended/"
 
 # Could set a custom stdout and stderr with -o and -e
@@ -43,7 +43,7 @@ def parse_args():
     parser.add_argument("-d", "--dependency", dest="dependency", metavar="INT", help="A job number to use as a dependency. Slurm will then wait until it's completed before starting this one. N.B., an integer is only labeled as being optional here to make integration with snakemake simpler.", type=int, nargs='?', const=False)
     parser.add_argument("-c", "--cmd_to_log", dest="cmd_to_log", action="store_true", help="echo bash commands to stdout (*.o) LOG file (default: '{}')".format(CMD_TO_LOG), default=CMD_TO_LOG)
     parser.add_argument("-n", "--name", dest="name", help="job name, which will also affect the log file names (default: '{}')".format(NAME), type=str, default=NAME)
-    parser.add_argument("-m", "--mem-per-cpu", dest="mem", metavar="MEMORY", help="maximum memory per core (e.g. '6G', default: '{}')".format(MEM), type=str, default=MEM)
+    parser.add_argument("-m", "--mem-per-cpu", dest="mem", metavar="MEMORY", help="maximum memory per core in MB if not otherwise specified (e.g. '6G', default: '{}')".format(MEM), type=str, default=MEM)
     parser.add_argument("-M", "--email", dest="email", help="Send an email to this address once the job has finished (see also --emailType) (default: ''). Note that you can specify this without an email address and {}@ie-freiburg.mpg.de will automatically be used.".format(NAME), type=str, const=True, default=False, nargs='?')
     parser.add_argument("--env_string", dest="env_string", help="Environment settings (default: '{}')".format(ENV_STRING), type=str, default=ENV_STRING)
     parser.add_argument("--emailType", dest="emailType", help="send email once the job has hit this state: BEGIN, END, FAIL or ALL finished (default: '{}')".format(EMAIL_TYPE), type=str, default=EMAIL_TYPE, choices=['BEGIN', 'END', 'FAIL', 'ALL'])
@@ -77,6 +77,8 @@ def main():
 
     # -m
     if args.mem:
+        if args.threads > 64 and args.mem == "5781":
+            args.mem = "3541"
         script.append("#SBATCH --mem-per-cpu={}".format(args.mem))
 
     # -M and --emailType
