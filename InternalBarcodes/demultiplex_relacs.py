@@ -15,7 +15,7 @@ except:
 def parseArgs(args=None):
     parser = argparse.ArgumentParser(description="Process RELACS reads by moving a barcode into the header and writing output to per-barcode files.")
     parser.add_argument('-p', '--numThreads', help='Number of threads to use. Note that there will only ever be a single thread used per illumina sample, so there is no reason so specify more threads than samples. Note also that the effective number of threads used will always be higher than this, since compression/decompression for each file occurs in a separate thread.', type=int, default=1)
-    parser.add_argument('-b', '--buffer', help='Number of bases of "buffer" to ignore after the barcode. (default: 0)', type=int, default=0)
+    parser.add_argument('-b', '--buffer', help='Number of bases of "buffer" to ignore after the barcode. (default: 1)', type=int, default=1)
     parser.add_argument('sampleTable', help="""A tab-separated table with three columns: Illumina sample	barcode	sample_name
 
 An example is:
@@ -31,6 +31,7 @@ Any observed barcode that does not match a barcode listed in the file (with a po
 This script must be run in directory containing subdirectories each having fastq files. This is the default structure output by bcl2fastq2 and our internal demultiplexing pipeline.
 """)
     parser.add_argument('output', metavar='output_basename', help="Base output directory, which must exist. As an example, if a given PE read has the barcode ACTACT, then it will be written to /output_basename/Sample_Lib_C838_11/Sample_R1.fastq.gz and /output_basename/Sample_Lib_C838_11/Sample_R2.fastq.gz")
+    parser.add_argument('--version', action='version', version="%(prog)s 1.0")
     args = parser.parse_args(args)
 
     if args.sampleTable is None or args.output is None:
@@ -65,7 +66,7 @@ def matchSample(sequence, sequence2, oDict, bcLen, buffer):
 
     Returns a tuple of the list of file pointers and True/False (whether the "default" output is being used)
     """
-    bc = sequence[buffer:bcLen]
+    bc = sequence[:bcLen]
     bc2 = sequence2[:bcLen] if sequence2 else None  # For whatever reason, padding isn't used
     if bc in oDict:
         if bc2 and ed.eval(bc, bc2) < 2:
