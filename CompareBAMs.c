@@ -47,6 +47,15 @@ int main(int argc, char *argv[]) {
                     sam_format1(hdr2, read2, ks);
                     printf("%s\n", ks->s);
                 } else {
+                    if(read1->core.flag != read2->core.flag) {
+                        printf("Differ on flag\n");
+                        sam_format1(hdr1, read1, ks);
+                        printf("%s\n", ks->s);
+                        sam_format1(hdr2, read2, ks);
+                        printf("%s\n", ks->s);
+                        continue;
+                    }
+ 
                     if(read1->core.n_cigar != read2->core.n_cigar) {
                         printf("Differ on n_cigar!\n");
                         sam_format1(hdr1, read1, ks);
