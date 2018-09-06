@@ -3,7 +3,8 @@ import argparse
 import sys
 import smtplib
 import os
-import textwrap
+import smtplib
+from email.mime.text import MIMEText
 
 
 def loadUserDictionary():
@@ -80,7 +81,7 @@ Your sequencing samples for project""".format(firstName)
             content += args.comment
         content += "\n"
 
-    content += "\nPlease let me know if you have any questions,\n{}\n".format(args.fromPerson)
+    content += "\n\nPlease let me know if you have any questions,\n{}\n".format(args.fromPerson)
 
     # Add a .signature
     if os.path.exists("/home/pipegrp/.signature"):
@@ -91,7 +92,7 @@ Your sequencing samples for project""".format(firstName)
     msg = MIMEText(content)
     msg['Subject'] = "Sequencing samples ready"
     msg['From'] = args.fromEmail
-    msg['To'] = args.fromEmail  # DEBUG should be email
+    msg['To'] = email
     if args.cc:
         msg['Cc'] = ", ".join(args.cc)
     msg['Bcc'] = args.fromEmail
