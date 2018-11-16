@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 import sys
 import os
 import argparse
@@ -16,6 +16,7 @@ def parseArgs(args=None):
     parser = argparse.ArgumentParser(description="Process RELACS reads by moving a barcode into the header and writing output to per-barcode files.")
     parser.add_argument('-p', '--numThreads', help='Number of threads to use. Note that there will only ever be a single thread used per illumina sample, so there is no reason so specify more threads than samples. Note also that the effective number of threads used will always be higher than this, since compression/decompression for each file occurs in a separate thread.', type=int, default=1)
     parser.add_argument('-b', '--buffer', help='Number of bases of "buffer" to ignore after the barcode. (default: 1)', type=int, default=1)
+    parser.add_argument('--umiLength', type=int, default=0, help="If present, the number of bases to be used as the UMI (default: 0). These precede the cell barcode.")
     parser.add_argument('sampleTable', help="""A tab-separated table with three columns: Illumina sample	barcode	sample_name
 
 An example is:
@@ -60,14 +61,14 @@ def readSampleTable(sampleTable):
     return (d, bcLen)
 
 
-def matchSample(sequence, sequence2, oDict, bcLen, buffer):
+def matchSample(sequence, sequence2, oDict, bcLen, umiLength):
     """
     Match a barcode against the sample sheet with a possible edit distance of 1.
 
     Returns a tuple of the list of file pointers and True/False (whether the "default" output is being used)
     """
-    bc = sequence[:bcLen]
-    bc2 = sequence2[:bcLen] if sequence2 else None  # For whatever reason, padding isn't used
+    bc = sequence[umiLength:bcLen + umiLength]
+    bc2 = sequence2[umiLength:bcLen + umiLength] if sequence2 else None  # For whatever reason, padding isn't used
     if bc in oDict:
         if bc2 and ed.eval(bc, bc2) < 2:
             return (bc, True)
@@ -93,22 +94,29 @@ def writeRead(lineList, of, bc, bcLen, args, doTrim=True):
     """
     rname = lineList[0]
     if doTrim:
+        UMI = ""
+        if args.umiLength > 0:
+            UMI = lineList[1][:args.umiLength]
+
         # Trim off the barcode
-        lineList[1] = lineList[1][bcLen + args.buffer:]
-        lineList[3] = lineList[3][bcLen + args.buffer:]
+        lineList[1] = lineList[1][bcLen + args.buffer + args.umiLength:]
+        lineList[3] = lineList[3][bcLen + args.buffer + args.umiLength:]
 
         # Fix the read name
         rname = rname.split()
-        rname[0] = "{}_{}".format(rname[0], bc)
+        if args.umiLength > 0:
+            rname[0] = "{}_{}_{}".format(rname[0], bc, UMI)
+        else:
+            rname[0] = "{}_{}".format(rname[0], bc)
         rname = " ".join(rname)
 
     if rname[-1] != '\n':
         rname += '\n'
 
-    of.write(rname)
-    of.write(lineList[1])
-    of.write(lineList[2])
-    of.write(lineList[3])
+    of.write(rname.encode())
+    of.write(lineList[1].encode())
+    of.write(lineList[2].encode())
+    of.write(lineList[3].encode())
 
     return rname
 
@@ -125,13 +133,13 @@ def writeRead2(lineList, of, bcLen, args, doTrim=True):
 
     if doTrim:
         # trim off the barcode
-        lineList[1] = lineList[1][bcLen + args.buffer:]
-        lineList[3] = lineList[3][bcLen + args.buffer:]
+        lineList[1] = lineList[1][bcLen + args.buffer + args.umiLength:]
+        lineList[3] = lineList[3][bcLen + args.buffer + args.umiLength:]
 
-    of.write(rname)
-    of.write(lineList[1])
-    of.write(lineList[2])
-    of.write(lineList[3])
+    of.write(rname.encode())
+    of.write(lineList[1].encode())
+    of.write(lineList[2].encode())
+    of.write(lineList[3].encode())
 
 
 def processPaired(args, sDict, bcLen, read1, read2):
@@ -141,15 +149,16 @@ def processPaired(args, sDict, bcLen, read1, read2):
     f2 = f2_.stdout
 
     for line1_1 in f1:
-        line1_2 = f1.next()
-        line1_3 = f1.next()
-        line1_4 = f1.next()
-        line2_1 = f2.next()
-        line2_2 = f2.next()
-        line2_3 = f2.next()
-        line2_4 = f2.next()
+        line1_1 = line1_1.decode("ascii")
+        line1_2 = f1.readline().decode("ascii")
+        line1_3 = f1.readline().decode("ascii")
+        line1_4 = f1.readline().decode("ascii")
+        line2_1 = f2.readline().decode("ascii")
+        line2_2 = f2.readline().decode("ascii")
+        line2_3 = f2.readline().decode("ascii")
+        line2_4 = f2.readline().decode("ascii")
 
-        (bc, isDefault) = matchSample(line1_2, line2_2, sDict, bcLen, args.buffer)
+        (bc, isDefault) = matchSample(line1_2, line2_2, sDict, bcLen, args.umiLength)
 
         rname = writeRead([line1_1, line1_2, line1_3, line1_4], sDict[bc][0], bc, bcLen, args, isDefault)
         writeRead2([rname , line2_2, line2_3, line2_4], sDict[bc][1], bcLen, args, isDefault)
@@ -163,10 +172,11 @@ def processSingle(args, sDict, bcLen, read1):
     f1 = f1_.stdout
 
     for line1_1 in f1:
-        line1_2 = f1.next()
-        line1_3 = f1.next()
-        line1_4 = f1.next()
-        (bc, isDefault) = matchSample(line1_2, None, sDict, bcLen, args.buffer)
+        line1_1 = line1_1.decode("ascii")
+        line1_2 = f1.readline().decode("ascii")
+        line1_3 = f1.readline().decode("ascii")
+        line1_4 = f1.readline().decode("ascii")
+        (bc, isDefault) = matchSample(line1_2, None, sDict, bcLen, args.umiLength)
         writeRead([line1_1, line1_2, line1_3, line1_4], sDict[bc], bc, bcLen, args, isDefault)
 
     f1.close()
@@ -195,21 +205,21 @@ def wrapper(foo):
     oDict = dict()
     if R2 is not None:
         for k, v in sDict.items():
-            oDict[k] = [subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R1.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE).stdin,
-                        subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R2.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE).stdin]
+            oDict[k] = [subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R1.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE, bufsize=0).stdin,
+                        subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R2.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE, bufsize=0).stdin]
         if 'default' not in oDict:
             k = 'default'
             v = 'unknown'
-            oDict[k] = [subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R1.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE).stdin,
-                        subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R2.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE).stdin]
+            oDict[k] = [subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R1.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE, bufsize=0).stdin,
+                        subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R2.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE, bufsize=0).stdin]
         processPaired(args, oDict, bcLen, R1, R2)
     else:
         for k, v in ssDict.items():
-            oDict[k] = [subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R1.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE).stdin]
+            oDict[k] = [subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R1.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE, bufsize=0).stdin]
         if 'default' not in oDict:
             k = 'default'
             v = 'unknown'
-            oDict[k] = [subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R1.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE).stdin]
+            oDict[k] = [subprocess.Popen(['gzip', '-c'], stdout=open('{}/{}/{}_R1.fastq.gz'.format(args.output, d, v), "wb"), stdin=subprocess.PIPE, bufsize=0).stdin]
         processSingle(args, oDict, bcLen, R1)
 
 
