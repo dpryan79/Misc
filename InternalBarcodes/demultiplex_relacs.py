@@ -17,6 +17,7 @@ def parseArgs(args=None):
     parser.add_argument('-p', '--numThreads', help='Number of threads to use. Note that there will only ever be a single thread used per illumina sample, so there is no reason so specify more threads than samples. Note also that the effective number of threads used will always be higher than this, since compression/decompression for each file occurs in a separate thread.', type=int, default=1)
     parser.add_argument('-b', '--buffer', help='Number of bases of "buffer" to ignore after the barcode. (default: 1)', type=int, default=1)
     parser.add_argument('--umiLength', type=int, default=0, help="If present, the number of bases to be used as the UMI (default: 0). These precede the cell barcode.")
+    parser.add_argument('--ignoreR2', action="store_true", help="If specified, ignore mismatches in the RELACS barcode between R1 and R2, using only that in R1 for assignment to a sample.")
     parser.add_argument('sampleTable', help="""A tab-separated table with three columns: Illumina sample	barcode	sample_name
 
 An example is:
@@ -158,7 +159,10 @@ def processPaired(args, sDict, bcLen, read1, read2):
         line2_3 = f2.readline().decode("ascii")
         line2_4 = f2.readline().decode("ascii")
 
-        (bc, isDefault) = matchSample(line1_2, line2_2, sDict, bcLen, args.umiLength)
+        if args.ignoreR2:
+            (bc, isDefault) = matchSample(line1_2, None, sDict, bcLen, args.umiLength)
+        else:
+            (bc, isDefault) = matchSample(line1_2, line2_2, sDict, bcLen, args.umiLength)
 
         rname = writeRead([line1_1, line1_2, line1_3, line1_4], sDict[bc][0], bc, bcLen, args, isDefault)
         writeRead2([rname , line2_2, line2_3, line2_4], sDict[bc][1], bcLen, args, isDefault)
