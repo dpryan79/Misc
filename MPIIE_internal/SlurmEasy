@@ -116,7 +116,7 @@ def main():
     if MAINTEMP == args.tempdir:
         script.append("""
 TMPDIR=%s
-scratch=$(mktemp -p $TMPDIR -d -t tmp.XXXXXXXXXX)""" % MAINTEMP)
+scratch=$(mktemp -p $TMPDIR -d -t tmp.XXXXXXXXXX)""" % MAINTEMP)/
     else:
         script.append("""
 TMPDIR=%s
