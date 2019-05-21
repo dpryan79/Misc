@@ -145,7 +145,7 @@ function cleanup {
 cd /
     rm -rf $scratch
 }
-trap cleanup SIGUSR2""" % args.env_string)
+trap cleanup SIGTERM SIGKILL SIGUSR2""" % args.env_string)
 
 
     # -c echo the command
